@@ -1,0 +1,29 @@
+﻿# Web 框架
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.6
+
+# LLM / Agent 框架（0.3.14+ 才完整支持 Python 3.13，旧版会锁 numpy<2 导致源码编译失败）
+langchain>=0.3.14,<0.4
+langchain-openai>=0.2.14,<0.4
+langgraph>=0.2.60,<0.4
+
+# 显式声明 numpy 2.x：为 Python 3.13 提供预编译 wheel，无需 C 编译器
+numpy>=2.1.0,<3.0
+
+# TTS 语音合成
+edge-tts>=6.1.12
+
+# HTTP / 爬虫
+httpx>=0.27.2
+
+# 配置管理
+python-dotenv>=1.0.1
+pydantic>=2.9.2
+pydantic-settings>=2.5.2
+
+# 文件上传（ASR 录音接收必需）
+python-multipart>=0.0.9
+langchain-mcp-adapters>=0.1.0
+mcp-server-fetch>=2025.1.14
+langgraph-checkpoint-postgres>=3.0.0
+pymilvus>=2.4.0
