@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     EMBEDDING_BASE_URL: str = ""
 
     # PostgreSQL 持久化记忆（LangGraph checkpointer）
-    POSTGRES_URI: str = "postgresql://postgres:123456@localhost:5432/langgraph"
+    POSTGRES_URI: str = "postgresql://postgres:<YOUR_PASSWORD>@localhost:5432/langgraph"
 
     @property
     def mcp_filesystem_roots(self) -> List[str]:

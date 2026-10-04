@@ -1,1 +1,16 @@
+# 敏感配置
 .env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+
+# LangGraph API 本地状态
+.langgraph_api/
+
+# 运行时产物（TTS 音频等）
+temp/
