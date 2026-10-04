@@ -2,12 +2,20 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.6
 
-# LLM / Agent 框架（0.3.14+ 才完整支持 Python 3.13，旧版会锁 numpy<2 导致源码编译失败）
-langchain>=0.3.14,<0.4
-langchain-openai>=0.2.14,<0.4
-langgraph>=0.2.60,<0.4
+# LLM / Agent 栈：与本地 .venv 实测可运行版本严格对齐
+# （langchain 0.3.30 + langchain-core 1.6.6 + langgraph 1.2.12 + mcp-adapters 0.3.2）
+langchain==0.3.30
+langchain-core==1.6.6
+langchain-mcp-adapters==0.3.2
+langchain-openai==0.3.35
+langchain-text-splitters==0.3.11
+langgraph==1.2.12
+langgraph-checkpoint==4.2.0
+langgraph-checkpoint-postgres==3.1.2
+mcp==1.30.0
+mcp-server-fetch>=2025.1.14
 
-# 显式声明 numpy 2.x：为 Python 3.13 提供预编译 wheel，无需 C 编译器
+# numpy 2.x：Python 3.13 有预编译 wheel
 numpy>=2.1.0,<3.0
 
 # TTS 语音合成
@@ -23,7 +31,9 @@ pydantic-settings>=2.5.2
 
 # 文件上传（ASR 录音接收必需）
 python-multipart>=0.0.9
-langchain-mcp-adapters>=0.1.0
-mcp-server-fetch>=2025.1.14
-langgraph-checkpoint-postgres>=3.0.0
-pymilvus>=2.4.0
+
+# psycopg 官方纯 Python 实现需要系统 libpq，slim 镜像没有；binary 版自带预编译库
+psycopg[binary]==3.3.6
+
+# Milvus 向量库客户端（与本地 .venv 对齐）
+pymilvus==3.0.2

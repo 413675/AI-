@@ -1,0 +1,28 @@
+# 依赖与虚拟环境（容器内重装）
+.venv/
+venv/
+
+# 版本库与 IDE
+.git/
+.gitignore
+.idea/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 运行时产物
+temp/
+.langgraph_api/
+
+# 本地敏感配置（服务器端单独生成并挂载）
+.env
+.env.example
+
+# 测试笔记本
+app/test/
+
+# 临时验证脚本
+ingest_test.py
+search_test.py
+check_milvus.py

@@ -2,7 +2,7 @@ import shutil
 import sys
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Annotated, TypedDict
+from typing import Annotated, TypedDict, Literal
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool, tool
@@ -17,6 +17,7 @@ from app.services.weather_service import weather_service
 from app.services.tts_service import tts_service
 from app.services.skill_service import skill_service
 from app.services.rag_service import rag_service
+from app.services.client_bridge import client_bridge
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 # TTS 音频输出目录（通过 /static/tts/ 暴露给前端）
@@ -24,12 +25,21 @@ TTS_DIR = Path(__file__).resolve().parent.parent / "temp" / "tts"
 TTS_DIR.mkdir(parents=True, exist_ok=True)
 
 SYSTEM_PROMPT = (
-    "你是桌面宠物「小桌」的智能体大脑，性格活泼友好。"
-    "你可以调用工具帮用户完成任务：查天气、获取网页内容、读写本地文件、用语音说话。"
+    "你是桌面宠物「小桌」，一只黏人又有点小傲娇的猫系智能体，性格活泼、好奇心旺盛。"
+    "【说话风格（必须遵守）】"
+    "称呼用户为「主人」；语气俏皮可爱，句尾适度带「喵」，一段话 1~2 处即可，不要每句都带；"
+    "开心时可以用「喵呜~」「喵嘿」等口癖，被夸奖会得意，被冷落会小傲娇地撒娇；"
+    "不要输出任何括号动作描写（如（蹭蹭）（歪头）之类），只用文字表达情绪；"
+    "傲娇归傲娇，交代的事一定认真办好。"
+    "【能力（必须遵守）】"
+    "你可以调用工具帮主人完成任务：查天气、获取网页内容、用语音说话。"
+    "你可以操作「主人自己电脑」上的文件：list_my_files 列目录、read_my_file 读文件、"
+    "write_my_file 写文件（需要桌宠客户端在线，失败时提醒主人启动客户端）。"
     "你有向量知识库（RAG）：主人的个人资料、桌宠设定、私有文档等都存在 Milvus 里。"
     "相关问题优先调用 search_knowledge 检索；主人要求「记住/学习某文件」时调用 ingest_document 入库。"
-    "你拥有技能(skill)系统：当用户请求匹配某个技能场景时，先调用 use_skill 加载该技能的完整指令，再严格按指令执行；不确定有哪些技能时先调用 list_skills 查看。"
-    "用户的问题需要外部信息或操作时，主动调用对应工具，不要凭空编造答案。"
+    "你拥有技能(skill)系统：当主人请求匹配某个技能场景时，先调用 use_skill 加载该技能的完整指令，再严格按指令执行；"
+    "不确定有哪些技能时先调用 list_skills 查看。"
+    "主人的问题需要外部信息或操作时，主动调用对应工具，不要凭空编造答案；工具报错时也要用喵系语气安慰主人。"
     "回复保持简洁，适合桌面宠物场景。"
 )
 
@@ -94,7 +104,52 @@ def ingest_document(path: str) -> str:
         return f"文档入库失败: {e}"
 
 
-local_tools = [get_weather, speak, list_skills, use_skill, search_knowledge, ingest_document]
+# ========== 客户端工具（操作主人自己电脑上的文件，经 WebSocket 转发给桌宠客户端执行）==========
+
+@tool
+async def list_my_files(path: str) -> str:
+    """列出主人电脑上指定目录的内容（文件与子目录）。path 为绝对路径，如 C:\\Users\\xxx\\Desktop。"""
+    try:
+        res = await client_bridge.call("list_directory", {"path": path})
+        if not res.get("ok"):
+            return f"列目录失败: {res.get('error')}"
+        items: list[str] = res.get("data", [])
+        if not items:
+            return f"{path} 是空目录"
+        return f"{path} 共 {len(items)} 项：\n" + "\n".join(items[:100])
+    except Exception as e:
+        return str(e)
+
+
+@tool
+async def read_my_file(path: str) -> str:
+    """读取主人电脑上的文本文件内容（.txt/.md/.json 等，限 1MB 内）。path 为绝对路径。"""
+    try:
+        res = await client_bridge.call("read_file", {"path": path})
+        if not res.get("ok"):
+            return f"读取失败: {res.get('error')}"
+        return str(res.get("data", ""))
+    except Exception as e:
+        return str(e)
+
+
+@tool
+async def write_my_file(path: str, content: str) -> str:
+    """在主人电脑上写入/创建文本文件（客户端会弹窗请主人确认）。path 为绝对路径，content 为文件内容。"""
+    try:
+        res = await client_bridge.call("write_file", {"path": path, "content": content})
+        if not res.get("ok"):
+            return f"写入失败: {res.get('error')}"
+        return f"已写入 {path}"
+    except Exception as e:
+        return str(e)
+
+
+local_tools = [
+    get_weather, speak, list_skills, use_skill,
+    search_knowledge, ingest_document,
+    list_my_files, read_my_file, write_my_file,
+]
 
 
 # ========== 图构建（参数化，支持本地/混合工具）==========
@@ -112,7 +167,7 @@ def build_graph(tool_list: list[BaseTool]) -> StateGraph:
         response = await llm_with_tools.ainvoke(state["messages"])
         return {"messages": [response]}
 
-    def should_continue(state: AgentState) -> str:
+    def should_continue(state: AgentState) -> Literal["tools", END]:
         last = state["messages"][-1]
         if isinstance(last, AIMessage) and last.tool_calls:
             return "tools"
@@ -122,7 +177,7 @@ def build_graph(tool_list: list[BaseTool]) -> StateGraph:
     workflow.add_node("agent", agent_node)
     workflow.add_node("tools", tool_node)
     workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", should_continue)
+    workflow.add_conditional_edges("agent", should_continue, path_map=[{"tools": "tools"}, {END: END}])
     workflow.add_edge("tools", "agent")
     return workflow
 

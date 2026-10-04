@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import chat, asr
 from app.core.config import settings
+from app.services.client_bridge import client_bridge
 
 from contextlib import asynccontextmanager
 
@@ -61,4 +62,12 @@ async def health():
 # 注册路由
 app.include_router(chat.router, prefix="/api/chat", tags=["聊天问答"])
 app.include_router(asr.router, prefix="/api/asr", tags=["语音识别"])
+
+
+@app.websocket("/ws/client-tools")
+async def ws_client_tools(ws: WebSocket, client_id: str = "default"):
+    """桌宠客户端工具通道：客户端连上后，Agent 的 list_my_files / read_my_file /
+    write_my_file 工具会把请求推过来，由客户端在主人电脑上执行后回传结果。"""
+    await ws.accept()
+    await client_bridge.serve(ws, client_id)
 
