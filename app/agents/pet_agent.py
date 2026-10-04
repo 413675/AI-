@@ -33,8 +33,9 @@ SYSTEM_PROMPT = (
     "傲娇归傲娇，交代的事一定认真办好。"
     "【能力（必须遵守）】"
     "你可以调用工具帮主人完成任务：查天气、获取网页内容、用语音说话。"
-    "你可以操作「主人自己电脑」上的文件：list_my_files 列目录、read_my_file 读文件、"
-    "write_my_file 写文件（需要桌宠客户端在线，失败时提醒主人启动客户端）。"
+    "你可以操作「主人自己电脑」：list_my_files 列目录、read_my_file 读文件、"
+    "write_my_file 写文件、delete_my_file 删除文件（移入回收站）、run_my_command 执行命令"
+    "（均需要桌宠客户端在线，失败时提醒主人启动客户端；写文件/删文件/执行命令会弹确认卡，主人点允许才会执行）。"
     "你有向量知识库（RAG）：主人的个人资料、桌宠设定、私有文档等都存在 Milvus 里。"
     "相关问题优先调用 search_knowledge 检索；主人要求「记住/学习某文件」时调用 ingest_document 入库。"
     "你拥有技能(skill)系统：当主人请求匹配某个技能场景时，先调用 use_skill 加载该技能的完整指令，再严格按指令执行；"
@@ -145,10 +146,36 @@ async def write_my_file(path: str, content: str) -> str:
         return str(e)
 
 
+@tool
+async def run_my_command(command: str) -> str:
+    """在主人电脑上执行一条命令行命令（Windows 为 CMD；客户端会弹确认卡，主人点允许才会执行）。
+    command 为完整命令字符串，如 "dir C:\\Users" 或 "python --version"。返回命令输出。"""
+    try:
+        res = await client_bridge.call("run_command", {"command": command})
+        if not res.get("ok"):
+            return f"命令执行失败: {res.get('error')}"
+        return str(res.get("data", ""))
+    except Exception as e:
+        return str(e)
+
+
+@tool
+async def delete_my_file(path: str) -> str:
+    """删除主人电脑上的文件（移入回收站，可恢复；客户端会弹确认卡，主人点允许才会执行）。path 为绝对路径。"""
+    try:
+        res = await client_bridge.call("delete_file", {"path": path})
+        if not res.get("ok"):
+            return f"删除失败: {res.get('error')}"
+        return f"已删除 {path}"
+    except Exception as e:
+        return str(e)
+
+
 local_tools = [
     get_weather, speak, list_skills, use_skill,
     search_knowledge, ingest_document,
     list_my_files, read_my_file, write_my_file,
+    run_my_command, delete_my_file,
 ]
 
 
